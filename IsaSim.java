@@ -10,19 +10,23 @@ import java.io.*;
 
 public class IsaSim {
 	// Insert path to binary file containing RISC-V instructions
-	public final static String filePath = "tests/INDSÆT NAVN HER!";
+	public final static String filePath = "tests/task1/addlarge.bin";
 
 	static int pc; // Program counter (counting in bytes)
 	static int reg[] = new int[32]; // 32 registers
 
+	// TODO: Implement another memory structure that stores both instructions
+	// and data memory elements in a smart way (map, perhaps?)
+	static byte progr[] = {(byte) 0x00, (byte) 0xA0, (byte) 0x00, (byte) 0x93};
+
 	public static void main(String[] args) throws IOException {
 		System.out.println("Hello RISC-V World!");
-		byte progr[] = readBinary(filePath);
 		pc = 0;
 
 		for (;;) {
 			// Combine four bytes to produce a single instruction
-			int instr = (progr[pc] << 24) + (progr[pc+1] << 16) + (progr[pc+2] << 8) + progr[pc+3];
+			int instr = (progr[pc] << 24) + (progr[pc+1] << 16) + (progr[pc+2] << 8) + progr[pc+3]; // TODO: Fix this
+			System.out.println("Instr = " + instr);
 			// Retrieve the least significant seven bits of the instruction
 			// indicating the type of instruction
 			int opcode = instr & 0x7f;
@@ -53,6 +57,7 @@ public class IsaSim {
 					break;
 
 				case 0x13: // Immediate instructions
+					System.out.println("Immediate instruction");
 					immediateInstruction(instr);
 					break;
 
@@ -84,8 +89,16 @@ public class IsaSim {
 	public static void jumpAndLink(int instr) {
 		// General information
 		int rd = (instr >> 7) & 0x1F;
-
-		// TODO: Implement this completely
+		int imm = (((instr >> 21) & 0x3FF) << 1) + (((instr >> 20) & 0x1) << 12) + (((instr >> 12) & 0xFF) << 13) + ((instr >> 31) << 22);
+		if ((instr >> 31) == 1) {
+			imm |= 0xFFF00000; // Sign-extension if necessary
+		}
+		reg[rd] = pc + 4; // JAL uses rd = x0 meaning that this result is lost
+		reg[1] = pc + 4; // Store return address
+		pc += imm; // Jump target address
+		if (pc % 4 != 0) {
+			System.out.println("Instruction fetch exception; pc not multiple of 4 bytes");
+		}
 	}
 
 	public static void jumpAndLinkRegister(int instr) {
@@ -93,32 +106,60 @@ public class IsaSim {
 		int rd = (instr >> 7) & 0x1F;
 		int rs1 = (instr >> 15) & 0x1F;
 		int imm = (instr >> 20);
-
-		// TODO: Implement this completely
+		if ((imm >> 11) == 1) {
+			imm |= 0xFFFFF000; // Sign-extension if necessary
+		}
+		reg[rd] = pc + 4; // Store return address
+		pc += (reg[rs1] + imm) & 0xFFFFFFFE; // Jump target address sets LSB to 0
+		if (pc % 4 != 0) {
+			System.out.println("Instruction fetch exception; pc not multiple of 4 bytes");
+		}
 	}
 
 	public static void branchInstruction(int instr) {
 		// General information
 		int rs1 = (instr >> 15) & 0x1F;
 		int rs2 = (instr >> 20) & 0x1F;
-
-		int imm = 1312; // TODO: Implement this
-
+		int imm = (((instr >> 8) & 0xF) << 1) + (((instr >> 25) & 0x3F) << 5) + (((instr >> 7) & 0x1) << 11) + ((instr >> 31) << 12);
+		if ((imm >> 11) == 1) {
+			imm |= 0xFFFFE000; // Sign-extension if necessary
+		}
 		// Determining the type of instruction
 		int funct3 = (instr >> 12) & 0x7;
 		switch (funct3) {
 			case 0x0: // BEQ
+				if (reg[rs1] == reg[rs2]) {
+					pc += imm;
+				} 
 				break;
 			case 0x1: // BNE
+				if (reg[rs1] != reg[rs2]) {
+					pc += imm;
+				}
 				break;
 			case 0x4: // BLT
+				if (reg[rs1] < reg[rs2]) {
+					pc += imm;
+				}
 				break;
 			case 0x5: // BGE
+				if (reg[rs1] >= reg[rs2]) {
+					pc += imm;
+				}
 				break;
 			case 0x6: // BLTU
+				if (((long) reg[rs1] & 0xFFFFFFFF) < ((long) reg[rs2] & 0xFFFFFFFF)) {
+					pc += imm;
+				}
 				break;
 			case 0x7: // BGEU
+				if (((long) reg[rs1] & 0xFFFFFFFF) >= ((long) reg[rs2] & 0xFFFFFFFF)) {
+					pc += imm;
+				}
 				break;
+		}
+		if (pc % 4 != 0) {
+			System.out.println("Instruction fetch exception; pc not multiple of 4 bytes");
 		}
 	}
 
@@ -127,16 +168,30 @@ public class IsaSim {
 		int rd = (instr >> 7) & 0x1F;
 		int rs1 = (instr >> 15) & 0x1F;
 		int imm = (instr >> 20);
+		if ((imm >> 11) == 1) {
+			imm |= 0xFFFFF000; // Sign-extension if necessary
+		}
+		System.out.println("rd = " + rd + ", rs1 = " + rs1 + ", imm = " + imm);
 		// Determining the type of instruction
 		int funct3 = (instr >> 12) & 0x7;
 		switch (funct3) {
 			case 0x0: // ADDI
 				reg[rd] = reg[rs1] + imm;
 				break;
-			case 0x2: // SLTI
-				break; // TODO: Implement this
-			case 0x3: // SLTIU
-				break; // TODO: Implement this
+			case 0x2: // SLTI (signed comparison)
+				if (reg[rs1] < imm) {
+					reg[rd] = 1;
+				} else {
+					reg[rd] = 0;
+				}
+				break;
+			case 0x3: // SLTIU (unsigned comparison)
+				if (((long) reg[rs1] & 0xFFFFFFFF) < ((long) imm & 0xFFFFFFFF)) {
+					reg[rd] = 1;
+				} else {
+					reg[rd] = 0;
+				}
+				break;
 			case 0x4: // XORI
 				reg[rd] = reg[rs1] ^ imm;
 				break;
@@ -189,17 +244,17 @@ public class IsaSim {
 				reg[rd] = 0;
 			}
 			break;
-		/*case 0x3: // SLTU (unsigned comparison)
+		case 0x3: // SLTU (unsigned comparison)
 			if (rs1 == 0 && reg[rs2] != 0) { // See manual page 15
 				reg[rd] = 1;
 			} else {
-				if ((unsigned) reg[rs1] < (unsigned) reg[rs2]) { // TODO: Fix this
+				if (((long) reg[rs1] & 0xFFFFFFFF) < ((long) reg[rs2] & 0xFFFFFFFF)) {
 					reg[rd] = 1;
 				} else {
 					reg[rd] = 0;
 				}
 			}
-			break;*/
+			break;
 		case 0x4: // XOR
 			reg[rd] = reg[rs1] ^ reg[rs2];
 			break;
@@ -222,7 +277,8 @@ public class IsaSim {
 	public static void printFile() throws IOException {
 		PrintWriter writer = null;
 		try {
-			writer = new PrintWriter(filePath + "_reg.txt", "UTF-8");
+			String filePathLocal = filePath.substring(0, filePath.indexOf("."));
+			writer = new PrintWriter(filePathLocal + "_reg.txt", "UTF-8");
 			writer.println("Post-execution register content");
 			for (int i = 0; i < reg.length; i++) {
 				writer.println("x" + i + " : " + reg[i]);
@@ -235,12 +291,11 @@ public class IsaSim {
 			}
 		}
 	}
-
+	/*
 	public static byte[] readBinary(String filePath) throws IOException {
 		// TODO: Find appropriate reader type and implement reading in a binary file
 		// into a byte array of appropriate size (read typically returns -1 when
 		// EOF is reached)
-		byte progr[] = null;
 		try {
 			
 		} catch (IOException e) {
@@ -250,4 +305,5 @@ public class IsaSim {
 		}
 		return progr;
 	}
+	*/
 }
