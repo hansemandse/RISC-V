@@ -42,7 +42,7 @@ public class IsaSim {
 			// Retrieve the least significant seven bits of the instruction
 			// indicating the type of instruction
 			int opcode = instr & 0x7f;
-
+			// Execute the instruction based on its type
 			switch (opcode) {
 				case 0x37: // LUI
 					if (DEBUGGING) {System.out.println("LUI instruction");}
@@ -50,6 +50,8 @@ public class IsaSim {
 					break;
 
 				case 0x17: // AUIPC
+					if (DEBUGGING) {System.out.println("AUIPC instruction");}
+					addUpperImmediatePC(instr);
 					break;
 
 				case 0x6F: // JAL
@@ -108,6 +110,14 @@ public class IsaSim {
 		int imm = instr & 0xFFFFF000;
 		if (DEBUGGING) {System.out.println("rd = " + rd + ", imm = " + imm);}
 		reg[rd] = imm; // LUI stores the immediate in the top 20 bits of register rd
+	}
+
+	public static void addUpperImmediatePC(int instr) {
+		// General information
+		int rd = (instr >> 7) & 0x1F;
+		int imm = instr & 0xFFFFF000;
+		if (DEBUGGING) {System.out.println("rd = " + rd + ", imm = " + imm);}
+		reg[rd] = pc + imm;
 	}
 
 	public static void jumpAndLink(int instr) {
