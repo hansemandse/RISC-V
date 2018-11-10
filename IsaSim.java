@@ -7,32 +7,46 @@
  */
 
 import java.io.*;
+import java.util.*;
 
 public class IsaSim {
 	// Insert path to binary file containing RISC-V instructions
-	public final static String filePath = "tests/task1/addlarge.bin";
+	public final static String FILEPATH = "tests/task2/branchcnt.bin";
 
-	static int pc; // Program counter (counting in bytes)
+	// Initial value of the program counter (default is zero)
+	public final static Integer INITIAL_PC = 0;
+
+	// Initial value of the stack pointer (depends on wanted memory size (currently 64 KB))
+	public final static Integer INITIAL_SP = 2^16;
+
+	// Activate/deactivate debugging prints
+	public final static Boolean DEBUGGING = true;
+
+	// Static variables used throughout the simulator
+	static int pc = INITIAL_PC; // Program counter (counting in bytes)
+	static int sp = INITIAL_SP; // Stack pointer (counting in bytes)
 	static int reg[] = new int[32]; // 32 registers
 
-	// TODO: Implement another memory structure that stores both instructions
-	// and data memory elements in a smart way (map, perhaps?)
-	static byte progr[] = {(byte) 0x00, (byte) 0xA0, (byte) 0x00, (byte) 0x93};
+	// A single memory for instructions and data allowing "byte addressing"
+	// using different integer key values (pc and sp counting in bytes)
+	public static Map<Integer, Integer> progr = new HashMap<Integer, Integer>();
 
 	public static void main(String[] args) throws IOException {
 		System.out.println("Hello RISC-V World!");
-		pc = 0;
+		readBinary(FILEPATH); // Read instructions into memory
+		pc = 0; // Reset program counter
 
 		for (;;) {
 			// Combine four bytes to produce a single instruction
-			int instr = (progr[pc] << 24) + (progr[pc+1] << 16) + (progr[pc+2] << 8) + progr[pc+3]; // TODO: Fix this
-			System.out.println("Instr = " + instr);
+			int instr = progr.get(pc);
 			// Retrieve the least significant seven bits of the instruction
 			// indicating the type of instruction
 			int opcode = instr & 0x7f;
 
 			switch (opcode) {
-				case 0x27: // LUI
+				case 0x37: // LUI
+					if (DEBUGGING) {System.out.println("LUI instruction");}
+					loadUpperImmediate(instr);
 					break;
 
 				case 0x17: // AUIPC
@@ -47,6 +61,7 @@ public class IsaSim {
 					break;
 
 				case 0x63: // Branch instructions
+					if (DEBUGGING) {System.out.println("Branch instruction");}
 					branchInstruction(instr);
 					break;
 
@@ -57,11 +72,12 @@ public class IsaSim {
 					break;
 
 				case 0x13: // Immediate instructions
-					System.out.println("Immediate instruction");
+					if (DEBUGGING) {System.out.println("Immediate instruction");}
 					immediateInstruction(instr);
 					break;
 
 				case 0x33: // Arithmetic instructions
+					if (DEBUGGING) {System.out.println("Arithmetic instruction");}
 					arithmeticInstruction(instr);
 					break;
 
@@ -70,20 +86,28 @@ public class IsaSim {
 				case 0x73: // Ecalls and CSR (SOME IMPLEMENTED, SOME LEFT OUT)
 					break;
 				default:
-					System.out.println("Opcode " + opcode + " not yet implemented");
+					if (DEBUGGING) {System.out.println("Opcode " + opcode + " not yet implemented");}
 					break;
 			}
 
-			pc += 4; // Counting in bytes
+			pc += 4; // Update program counter
 			reg[0] = 0; // Resetting the x0 register
-			
-			if (pc >= progr.length) {
-				printFile();
+
+			// No entry in the memory for the updated pc means execution has finished
+			if (progr.get(pc) == null) { 
+				printFile(FILEPATH);
 				break;
 			}
 		}
-
 		System.out.println("Program exit");
+	}
+
+	public static void loadUpperImmediate(int instr) {
+		// General information
+		int rd = (instr >> 7) & 0x1F;
+		int imm = instr & 0xFFFFF000;
+		if (DEBUGGING) {System.out.println("rd = " + rd + ", imm = " + imm);}
+		reg[rd] = imm; // LUI stores the immediate in the top 20 bits of register rd
 	}
 
 	public static void jumpAndLink(int instr) {
@@ -124,6 +148,7 @@ public class IsaSim {
 		if ((imm >> 11) == 1) {
 			imm |= 0xFFFFE000; // Sign-extension if necessary
 		}
+		if (DEBUGGING) {System.out.println("rs1 = " + rs1 + ", rs2 = " + rs2 + ", imm = " + imm);}
 		// Determining the type of instruction
 		int funct3 = (instr >> 12) & 0x7;
 		switch (funct3) {
@@ -171,7 +196,7 @@ public class IsaSim {
 		if ((imm >> 11) == 1) {
 			imm |= 0xFFFFF000; // Sign-extension if necessary
 		}
-		System.out.println("rd = " + rd + ", rs1 = " + rs1 + ", imm = " + imm);
+		if (DEBUGGING) {System.out.println("rd = " + rd + ", rs1 = " + rs1 + ", imm = " + imm);}
 		// Determining the type of instruction
 		int funct3 = (instr >> 12) & 0x7;
 		switch (funct3) {
@@ -223,6 +248,7 @@ public class IsaSim {
 		int rd = (instr >> 7) & 0x1F;
 		int rs1 = (instr >> 15) & 0x1F;
 		int rs2 = (instr >> 20) & 0x1F;
+		if (DEBUGGING) {System.out.println("rd = " + rd + ", rs1 = " + rs1 + ", rs2 = " + rs2);}
 		// Determining the type of instruction
 		int funct3 = (instr >> 12) & 0x7;
 		int funct7 = (instr >> 25);
@@ -274,11 +300,12 @@ public class IsaSim {
 		}
 	}
 
-	public static void printFile() throws IOException {
+	public static void printFile(String filePath) throws IOException {
 		PrintWriter writer = null;
+		String filePathLocal = filePath.substring(0, filePath.indexOf(".")) + "_reg.txt";
+		if (DEBUGGING) {System.out.println("Printing register content");}
 		try {
-			String filePathLocal = filePath.substring(0, filePath.indexOf("."));
-			writer = new PrintWriter(filePathLocal + "_reg.txt", "UTF-8");
+			writer = new PrintWriter(filePathLocal, "UTF-8");
 			writer.println("Post-execution register content");
 			for (int i = 0; i < reg.length; i++) {
 				writer.println("x" + i + " : " + reg[i]);
@@ -290,20 +317,32 @@ public class IsaSim {
 				writer.close();
 			}
 		}
+		if (DEBUGGING) {System.out.println("Finished printing register content");}
+		System.out.println("Register content is in file " + filePathLocal);
 	}
-	/*
-	public static byte[] readBinary(String filePath) throws IOException {
-		// TODO: Find appropriate reader type and implement reading in a binary file
-		// into a byte array of appropriate size (read typically returns -1 when
-		// EOF is reached)
+	
+	public static void readBinary(String filePath) throws IOException, EOFException {
+		FileInputStream fileStream = null;
+		DataInputStream dataStream = null;
+		if (DEBUGGING) {System.out.println("Reading instructions");}
 		try {
-			
+			fileStream = new FileInputStream(filePath);
+			dataStream = new DataInputStream(fileStream);
+			int localPc = 0, instr;
+			while ((instr = dataStream.readInt()) != -1) {
+				progr.put(localPc, Integer.reverseBytes(instr));
+				localPc += 4;
+			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			// Do nothing - the input part of this program works as it is supposed to
 		} finally {
-			
+			if (fileStream != null) {
+				fileStream.close();
+			}
+			if (dataStream != null) {
+				dataStream.close();
+			}
 		}
-		return progr;
+		if (DEBUGGING) {System.out.println("Finished reading instructions");}
 	}
-	*/
 }
