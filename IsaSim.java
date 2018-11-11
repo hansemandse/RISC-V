@@ -11,7 +11,7 @@ import java.util.*;
 
 public class IsaSim {
 	// Insert path to binary file containing RISC-V instructions
-	public final static String FILEPATH = "tests/task2/branchcnt.bin";
+	public final static String FILEPATH = "tests/task2/branchmany.bin";
 
 	// Initial value of the program counter (default is zero)
 	public final static Integer INITIAL_PC = 0;
@@ -34,7 +34,7 @@ public class IsaSim {
 	public static void main(String[] args) throws IOException {
 		System.out.println("Hello RISC-V World!");
 		readBinary(FILEPATH); // Read instructions into memory
-		pc = 0; // Reset program counter
+		boolean offsetPC = false;
 
 		for (;;) {
 			// Combine four bytes to produce a single instruction
@@ -56,15 +56,17 @@ public class IsaSim {
 
 				case 0x6F: // JAL
 					jumpAndLink(instr);
+					offsetPC = true;
 					break;
 
 				case 0x67: // JALR
 					jumpAndLinkRegister(instr);
+					offsetPC = true;
 					break;
 
 				case 0x63: // Branch instructions
 					if (DEBUGGING) {System.out.println("Branch instruction");}
-					branchInstruction(instr);
+					offsetPC = branchInstruction(instr);
 					break;
 
 				case 0x03: // Load instructions
@@ -92,7 +94,10 @@ public class IsaSim {
 					break;
 			}
 
-			pc += 4; // Update program counter
+			if (!offsetPC) {
+				pc += 4; // Update program counter
+			}
+			offsetPC = false; // Reset the pc offset flag
 			reg[0] = 0; // Resetting the x0 register
 
 			// No entry in the memory for the updated pc means execution has finished
@@ -150,7 +155,7 @@ public class IsaSim {
 		}
 	}
 
-	public static void branchInstruction(int instr) {
+	public static boolean branchInstruction(int instr) {
 		// General information
 		int rs1 = (instr >> 15) & 0x1F;
 		int rs2 = (instr >> 20) & 0x1F;
@@ -165,37 +170,44 @@ public class IsaSim {
 			case 0x0: // BEQ
 				if (reg[rs1] == reg[rs2]) {
 					pc += imm;
+					return true;
 				} 
 				break;
 			case 0x1: // BNE
 				if (reg[rs1] != reg[rs2]) {
 					pc += imm;
+					return true;
 				}
 				break;
 			case 0x4: // BLT
 				if (reg[rs1] < reg[rs2]) {
 					pc += imm;
+					return true;
 				}
 				break;
 			case 0x5: // BGE
 				if (reg[rs1] >= reg[rs2]) {
 					pc += imm;
+					return true;
 				}
 				break;
 			case 0x6: // BLTU
 				if (((long) reg[rs1] & 0xFFFFFFFF) < ((long) reg[rs2] & 0xFFFFFFFF)) {
 					pc += imm;
+					return true;
 				}
 				break;
 			case 0x7: // BGEU
 				if (((long) reg[rs1] & 0xFFFFFFFF) >= ((long) reg[rs2] & 0xFFFFFFFF)) {
 					pc += imm;
+					return true;
 				}
 				break;
 		}
 		if (pc % 4 != 0) {
 			System.out.println("Instruction fetch exception; pc not multiple of 4 bytes");
 		}
+		return false;
 	}
 
 	public static void immediateInstruction(int instr) {
