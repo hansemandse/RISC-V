@@ -6,20 +6,21 @@
  * @author Hans Jakob Damsgaard (hansjakobdamsgaard@gmail.com)
  */
 
+import Memory;
 import java.io.*;
 import java.util.*;
 
 public class IsaSim {
 	// Insert path to binary file containing RISC-V instructions
-	public final static String FILEPATH = "tests/addi/test_lb.bin";
+	public final static String FILEPATH = "tests/addi/test_sh.bin";
 
 	// Initial value of the program counter (default is zero)
 	public final static Integer INITIAL_PC = 0;
 
-	// Initial value of the stack pointer (default is 2^30 - 1)
-	public final static Integer INITIAL_SP = (int) Math.pow(2, 30) - 1;
+	// Initial value of the stack pointer (default is 2^31 - 1)
+	public final static Integer INITIAL_SP = Integer.MAX_VALUE;
 
-	// Activate/deactivate debugging prints
+	// Activate/deactivate debugging prints (default is true)
 	public final static Boolean DEBUGGING = true;
 
 	// Static variables used throughout the simulator
@@ -28,18 +29,17 @@ public class IsaSim {
 
 	// A single memory for instructions and data allowing "byte addressing"
 	// using different integer key values (pc and sp counting in bytes)
-	public static Map<Integer, Integer> memory = new HashMap<Integer, Integer>();
+	static Memory ram = new Memory();
 
 	public static void main(String[] args) throws IOException {
 		System.out.println("Hello RISC-V World!");
 		reg[2] = INITIAL_SP; // Reset stack pointer
-		System.out.println(reg[2]);
-		readBinary(FILEPATH); // Read instructions into memory
+		ram.readBinary(FILEPATH); // Read instructions into memory
 		boolean offsetPC = false; // For determining next pc value
 
 		for (;;) {
 			// Combine four bytes to produce a single instruction
-			int instr = memory.get(pc);
+			int instr = ram.readWord(pc);
 
 			// Retrieve the least significant seven bits of the instruction
 			// indicating the type of instruction
@@ -112,7 +112,7 @@ public class IsaSim {
 			reg[0] = 0; // Resetting the x0 register
 
 			// No entry in the memory for the updated pc means execution has finished
-			if (memory.get(pc) == null) { 
+			if (!ram.containsKey(pc + 4)) { 
 				printFile(FILEPATH);
 				break;
 			}
@@ -161,6 +161,7 @@ public class IsaSim {
 		}
 		if (DEBUGGING) {System.out.println("rd = " + rd + ", rs1 = " + rs1 + ", imm = " + imm);}
 		reg[rd] = pc + 4; // Store return address
+		// TODO: Remove + in += below and fix infinite loop in loop.s
 		pc += (reg[rs1] + imm) & 0xFFFFFFFE; // Jump target address sets LSB to 0
 		if (pc % 4 != 0) {
 			System.out.println("Instruction fetch exception; pc not multiple of 4 bytes");
@@ -222,7 +223,7 @@ public class IsaSim {
 		return false;
 	}
 
-	public static void loadInstruction(int instr) {
+	public static void loadInstruction(int instr) throws NullPointerException {
 		// General information
 		int rd = (instr >> 7) & 0x1F;
 		int rs1 = (instr >> 15) & 0x1F;
@@ -234,29 +235,49 @@ public class IsaSim {
 		if (DEBUGGING) {System.out.println("rd = " + rd + ", rs1 = " + rs1 + ", imm = " + imm + ", memAddr = " + memAddr);}
 		// Determining the type of instruction
 		int funct3 = (instr >> 12) & 0x7;
-		// Load value from memory
-		int memValue = memory.get(memAddr); // TODO: Implement null check
+		// Initializing an integer to read data into
+		int memValue = 0;
 		switch (funct3) {
 			case 0x0: // LB
-				memValue &= 0x000000FF;
-				if ((memValue >> 7) == 1) {
-					memValue |= 0xFFFFFF00; // Sign-extension if necessary
+				if (ram.containsKey(memAddr)) {
+					memValue = ram.readByte(memAddr);
+					if ((memValue >> 7) == 1) {
+						memValue |= 0xFFFFFF00; // Sign-extension if necessary
+					}
+				} else {
+					throw new NullPointerException();
 				}
 				break;
 			case 0x1: // LH
-				memValue &= 0x0000FFFF;
-				if ((memValue >> 15) == 1) {
-					memValue |= 0xFFFF0000; // Sign-extension if necessary
+				if (ram.containsKey(memAddr)) {
+					memValue = ram.readHalfWord(memAddr);
+					if ((memValue >> 15) == 1) {
+						memValue |= 0xFFFF0000; // Sign-extension if necessary
+					}
+				} else {
+					throw new NullPointerException();
 				}
 				break;
 			case 0x2: // LW
-				// No action necessary
+				if (ram.containsKey(memAddr)) {
+					memValue = ram.readWord(memAddr);
+				} else {
+					throw new NullPointerException();
+				}
 				break;
 			case 0x4: // LBU
-				memValue &= 0x000000FF;
+				if (ram.containsKey(memAddr)) {
+					memValue = ram.readByte(memAddr);
+				} else {
+					throw new NullPointerException();
+				}
 				break;
 			case 0x5: // LHU
-				memValue &= 0x0000FFFF;
+				if (ram.containsKey(memAddr)) {
+					memValue = ram.readHalfWord(memAddr);
+				} else {
+					throw new NullPointerException();
+				}
 				break;
 		}
 		reg[rd] = memValue;
@@ -279,15 +300,16 @@ public class IsaSim {
 		switch (funct3) {
 			case 0x0: // SB
 				memValue &= 0x000000FF;
+				ram.storeByte(memAddr, memValue);
 				break;
-			case 0x1: // SH
+			case 0x1: // SH (TODO: test_sh does not work)
 				memValue &= 0x0000FFFF;
+				ram.storeHalfWord(memAddr, memValue);
 				break;
-			case 0x2: // SW
-				// No action necessary
+			case 0x2: // SW (TODO: test_sw does not work)
+				ram.storeWord(memAddr, memValue);
 				break;
 		}
-		memory.put(memAddr, memValue); // Create entry or overwrite previous entry
 	}
 
 	public static void immediateInstruction(int instr) {
@@ -332,10 +354,11 @@ public class IsaSim {
 				// Additional information 
 				int funct7 = (instr >> 25);
 				int shamt = (instr >> 20) & 0x1F;
+				if (DEBUGGING) {System.out.println("funct3 = " + funct3 + ", funct7 = " + funct7 + ", shamt = " + shamt);}
 				if (funct3 == 0x1 && funct7 == 0x00) { // SLLI
 					reg[rd] = (reg[rs1] << shamt);
 					break;
-				} else if (funct3 == 0x20 && funct7 == 0x00) { // SRLI
+				} else if (funct3 == 0x5 && funct7 == 0x00) { // SRLI
 					reg[rd] = (reg[rs1] >>> shamt);
 					break;
 				} else { // SRAI
@@ -421,30 +444,5 @@ public class IsaSim {
 		}
 		if (DEBUGGING) {System.out.println("Finished printing register content");}
 		System.out.println("Register content is in file " + filePathLocal);
-	}
-	
-	public static void readBinary(String filePath) throws IOException, EOFException {
-		FileInputStream fileStream = null;
-		DataInputStream dataStream = null;
-		if (DEBUGGING) {System.out.println("Reading instructions");}
-		try {
-			fileStream = new FileInputStream(filePath);
-			dataStream = new DataInputStream(fileStream);
-			int localPc = 0, instr;
-			while ((instr = dataStream.readInt()) != -1) {
-				memory.put(localPc, Integer.reverseBytes(instr));
-				localPc += 4;
-			}
-		} catch (IOException e) {
-			// Do nothing - the input part of this program works as it is supposed to
-		} finally {
-			if (fileStream != null) {
-				fileStream.close();
-			}
-			if (dataStream != null) {
-				dataStream.close();
-			}
-		}
-		if (DEBUGGING) {System.out.println("Finished reading instructions");}
 	}
 }
