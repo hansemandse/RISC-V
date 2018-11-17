@@ -21,7 +21,7 @@ public class IsaSim {
 	public final static Integer INITIAL_SP = Integer.MAX_VALUE;
 
 	// Activate/deactivate debugging prints (default is true)
-	public final static Boolean DEBUGGING = true;
+	public final static Boolean DEBUGGING = false;
 
 	// Static variables used throughout the simulator
 	static int pc = INITIAL_PC; // Program counter (counting in bytes)
@@ -98,7 +98,25 @@ public class IsaSim {
 					break;
 
 				case 0x73: // Ecalls and CSR (SOME IMPLEMENTED, SOME LEFT OUT)
-					breakProgram = true;
+					switch (reg[10]) {
+						case 1: // print_int
+							System.out.println(reg[11]);
+							break;
+						case 4: // print_string
+							break;
+						case 9: // sbrk
+							break;
+						case 10: // exit
+							breakProgram = true;
+							break;
+						case 11: // print_character
+							System.out.println((char) reg[11]);
+							break;
+						case 17: // exit2
+							reg[11] = 0;
+							breakProgram = true;
+							break;
+					}
 					break;
 
 				default:
@@ -114,12 +132,13 @@ public class IsaSim {
 
 			// Ecall or Ebreak has been encountered
 			if (breakProgram) {
+				if (DEBUGGING) {System.out.println("Ecall encountered");}
 				printFile(FILEPATH);
 				break;
 			}
 
 			// No entry in the memory for the updated pc means execution has finished
-			if (!ram.containsKey(pc + 4)) { 
+			if (!ram.containsKey(pc)) { 
 				printFile(FILEPATH);
 				break;
 			}
@@ -168,7 +187,6 @@ public class IsaSim {
 		}
 		if (DEBUGGING) {System.out.println("rd = " + rd + ", rs1 = " + rs1 + ", imm = " + imm);}
 		reg[rd] = pc + 4; // Store return address
-		// TODO: Remove + in += below and fix infinite loop in loop.s
 		pc = (reg[rs1] + imm) & 0xFFFFFFFE; // Jump target address sets LSB to 0
 		if (pc % 4 != 0) {
 			System.out.println("Instruction fetch exception; pc not multiple of 4 bytes");
@@ -211,13 +229,13 @@ public class IsaSim {
 					return true;
 				}
 				break;
-			case 0x6: // BLTU
+			case 0x6: // BLTU (TODO: does not work with test_bltu)
 				if (((long) reg[rs1] & 0xFFFFFFFF) < ((long) reg[rs2] & 0xFFFFFFFF)) {
 					pc += imm;
 					return true;
 				}
 				break;
-			case 0x7: // BGEU
+			case 0x7: // BGEU (TODO: does not work with test_bgeu)
 				if (((long) reg[rs1] & 0xFFFFFFFF) >= ((long) reg[rs2] & 0xFFFFFFFF)) {
 					pc += imm;
 					return true;
@@ -341,7 +359,7 @@ public class IsaSim {
 					reg[rd] = 0;
 				}
 				break;
-			case 0x3: // SLTIU (unsigned comparison)
+			case 0x3: // SLTIU (unsigned comparison) (TODO: does not work with test_sltiu)
 				if (((long) reg[rs1] & 0xFFFFFFFF) < ((long) imm & 0xFFFFFFFF)) {
 					reg[rd] = 1;
 				} else {
@@ -402,7 +420,7 @@ public class IsaSim {
 				reg[rd] = 0;
 			}
 			break;
-		case 0x3: // SLTU (unsigned comparison)
+		case 0x3: // SLTU (unsigned comparison) (TODO: does not work with test_sltu)
 			if (rs1 == 0 && reg[rs2] != 0) { // See manual page 15
 				reg[rd] = 1;
 			} else {
@@ -434,19 +452,33 @@ public class IsaSim {
 
 	public static void printFile(String filePath) throws IOException {
 		PrintWriter writer = null;
+		FileInputStream fileStream = null;
+		DataInputStream dataStream = null;
 		String filePathLocal = filePath.substring(0, filePath.indexOf(".")) + "_reg.txt";
 		if (DEBUGGING) {System.out.println("Printing register content");}
 		try {
 			writer = new PrintWriter(filePathLocal, "UTF-8");
+			fileStream = new FileInputStream(filePath.substring(0, filePath.indexOf(".")) + ".res");
+			dataStream = new DataInputStream(fileStream);
 			writer.println("Post-execution register content");
 			for (int i = 0; i < reg.length; i++) {
 				writer.println("x" + i + " : " + reg[i]);
+			}
+			writer.println("\nExpected post-execution register content");
+			for (int i = 0; i < reg.length; i++) {
+				writer.println("x" + i + " : " + Integer.reverseBytes(dataStream.readInt()));
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		} finally {
 			if (writer != null) {
 				writer.close();
+			}
+			if (dataStream != null) {
+				dataStream.close();
+			}
+			if (fileStream != null) {
+				fileStream.close();
 			}
 		}
 		if (DEBUGGING) {System.out.println("Finished printing register content");}
