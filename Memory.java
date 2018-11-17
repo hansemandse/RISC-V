@@ -23,24 +23,15 @@ public class Memory {
     }
 
     public int readWord(int addr) {
-        if (!memory.containsKey(addr)) {
-            throw new NullPointerException("Memory has no entry for the given key");
-        }
         return ((memory.get(addr+3) << 24) & 0xFF000000) | ((memory.get(addr+2) << 16) & 0x00FF0000) |
                ((memory.get(addr+1) << 8) & 0x0000FF00) | (memory.get(addr) & 0x000000FF);
     }
 
     public int readHalfWord(int addr) {
-        if (!memory.containsKey(addr)) {
-            throw new NullPointerException("Memory has no entry for the given key");
-        }
         return ((memory.get(addr+1) << 8) & 0x0000FF00) | (memory.get(addr) & 0x000000FF);
     }
 
     public int readByte(int addr) {
-        if (!memory.containsKey(addr)) {
-            throw new NullPointerException("Memory has no entry for the given key");
-        }
         return memory.get(addr) & 0x000000FF;
     }
 
@@ -64,7 +55,7 @@ public class Memory {
 		FileInputStream fileStream = null;
 		DataInputStream dataStream = null;
 		try {
-			fileStream = new FileInputStream(filePath);
+            fileStream = new FileInputStream(filePath);
 			dataStream = new DataInputStream(fileStream);
             int localPc = 0, instr;
 			while ((instr = dataStream.readInt()) != -1) {

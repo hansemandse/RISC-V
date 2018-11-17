@@ -12,7 +12,7 @@ import java.util.*;
 
 public class IsaSim {
 	// Insert path to binary file containing RISC-V instructions
-	public final static String FILEPATH = "tests/task3/loop.bin";
+	public final static String FILEPATH = "tests/addi/test_jalr.bin";
 
 	// Initial value of the program counter (default is zero)
 	public final static Integer INITIAL_PC = 0;
@@ -98,25 +98,7 @@ public class IsaSim {
 					break;
 
 				case 0x73: // Ecalls and CSR (SOME IMPLEMENTED, SOME LEFT OUT)
-					switch (reg[10]) {
-						case 1: // print_int
-							System.out.println(reg[11]);
-							break;
-						case 4: // print_string
-							break;
-						case 9: // sbrk
-							break;
-						case 10: // exit
-							breakProgram = true;
-							break;
-						case 11: // print_character
-							System.out.println((char) reg[11]);
-							break;
-						case 17: // exit2
-							reg[11] = 0;
-							breakProgram = true;
-							break;
-					}
+					breakProgram = ecallInstruction();
 					break;
 
 				default:
@@ -447,6 +429,26 @@ public class IsaSim {
 		case 0x7: // AND
 			reg[rd] = reg[rs1] & reg[rs2];
 			break;
+		}
+	}
+
+	public static boolean ecallInstruction() {
+		switch (reg[10]) {
+			case 1: // print_int
+				System.out.println(reg[11]);
+				return false;
+			case 4: // print_string
+				return false;
+			case 9: // sbrk
+				return false;
+			case 10: // exit
+				return true;
+			case 11: // print_character
+				System.out.println((char) reg[11]);
+				return false;
+			default: // exit2
+				reg[11] = 0;
+				return true;
 		}
 	}
 
