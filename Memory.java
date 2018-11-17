@@ -13,8 +13,6 @@ public class Memory {
     // A map simulating the memory
     private Map<Integer, Byte> memory;
 
-    private final static Integer BYTES_IN_WORD = 4;
-
     // Constructor for the memory class
     public Memory() {
         this.memory = new HashMap<Integer, Byte>();
@@ -25,28 +23,37 @@ public class Memory {
     }
 
     public int readWord(int addr) {
-        return ((memory.get(addr) << 24) & 0xFF000000) | ((memory.get(addr+1) << 16) & 0x00FF0000) |
-               ((memory.get(addr+2) << 8) & 0x0000FF00) | (memory.get(addr+3) & 0x000000FF);
+        if (!memory.containsKey(addr)) {
+            throw new NullPointerException("Memory has no entry for the given key");
+        }
+        return ((memory.get(addr+3) << 24) & 0xFF000000) | ((memory.get(addr+2) << 16) & 0x00FF0000) |
+               ((memory.get(addr+1) << 8) & 0x0000FF00) | (memory.get(addr) & 0x000000FF);
     }
 
     public int readHalfWord(int addr) {
-        return ((memory.get(addr) << 8) & 0x0000FF00) | (memory.get(addr+1) & 0x000000FF);
+        if (!memory.containsKey(addr)) {
+            throw new NullPointerException("Memory has no entry for the given key");
+        }
+        return ((memory.get(addr+1) << 8) & 0x0000FF00) | (memory.get(addr) & 0x000000FF);
     }
 
     public int readByte(int addr) {
+        if (!memory.containsKey(addr)) {
+            throw new NullPointerException("Memory has no entry for the given key");
+        }
         return memory.get(addr) & 0x000000FF;
     }
 
     public void storeWord(int addr, int value) {
-        memory.put(addr, (byte) (value >> 24));
-        memory.put(addr+1, (byte) (value >> 16));
-        memory.put(addr+2, (byte) (value >> 8));
-        memory.put(addr+3, (byte) value);
+        memory.put(addr, (byte) (value));
+        memory.put(addr+1, (byte) (value >> 8));
+        memory.put(addr+2, (byte) (value >> 16));
+        memory.put(addr+3, (byte) (value >> 24));
     }
 
     public void storeHalfWord(int addr, int value) {
-        memory.put(addr, (byte) (value >> 8));
-        memory.put(addr+1, (byte) value);
+        memory.put(addr, (byte) value);
+        memory.put(addr+1, (byte) (value >> 8));
     }
 
     public void storeByte(int addr, int value) {
@@ -60,16 +67,12 @@ public class Memory {
 			fileStream = new FileInputStream(filePath);
 			dataStream = new DataInputStream(fileStream);
             int localPc = 0, instr;
-            byte[] instrA = new byte[4];
 			while ((instr = dataStream.readInt()) != -1) {
-                instrA = intToByteArray(Integer.reverseBytes(instr));
-				for (int i = 0; i < BYTES_IN_WORD; i++) {
-                    memory.put(localPc, instrA[i]);
-                    localPc++;
-                }
+                storeWord(localPc, Integer.reverseBytes(instr));
+                localPc += 4;
 			}
 		} catch (IOException e) {
-			// Do nothing - the input part of this program works as it is supposed to
+            // Do nothing - else do e.printStackTrace();
 		} finally {
 			if (fileStream != null) {
 				fileStream.close();
@@ -78,12 +81,5 @@ public class Memory {
 				dataStream.close();
 			}
 		}
-    }
-    
-    // Taken from https://stackoverflow.com/questions/2183240/java-integer-to-byte-array
-    private byte[] intToByteArray(int value) {
-        return new byte[] {
-                (byte) (value >>> 24), (byte) (value >>> 16),
-                (byte) (value >>> 8), (byte) value};
     }
 }

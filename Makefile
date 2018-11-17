@@ -1,5 +1,6 @@
 
 all:
+	javac Memory.java
 	javac IsaSim.java
 	java IsaSim
 

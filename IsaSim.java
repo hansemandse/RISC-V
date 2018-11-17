@@ -12,7 +12,7 @@ import java.util.*;
 
 public class IsaSim {
 	// Insert path to binary file containing RISC-V instructions
-	public final static String FILEPATH = "tests/addi/test_sh.bin";
+	public final static String FILEPATH = "tests/task3/loop.bin";
 
 	// Initial value of the program counter (default is zero)
 	public final static Integer INITIAL_PC = 0;
@@ -35,7 +35,7 @@ public class IsaSim {
 		System.out.println("Hello RISC-V World!");
 		reg[2] = INITIAL_SP; // Reset stack pointer
 		ram.readBinary(FILEPATH); // Read instructions into memory
-		boolean offsetPC = false; // For determining next pc value
+		boolean offsetPC = false, breakProgram = false; // For determining next pc value
 
 		for (;;) {
 			// Combine four bytes to produce a single instruction
@@ -98,6 +98,7 @@ public class IsaSim {
 					break;
 
 				case 0x73: // Ecalls and CSR (SOME IMPLEMENTED, SOME LEFT OUT)
+					breakProgram = true;
 					break;
 
 				default:
@@ -110,6 +111,12 @@ public class IsaSim {
 			}
 			offsetPC = false; // Reset the pc offset flag
 			reg[0] = 0; // Resetting the x0 register
+
+			// Ecall or Ebreak has been encountered
+			if (breakProgram) {
+				printFile(FILEPATH);
+				break;
+			}
 
 			// No entry in the memory for the updated pc means execution has finished
 			if (!ram.containsKey(pc + 4)) { 
@@ -162,7 +169,7 @@ public class IsaSim {
 		if (DEBUGGING) {System.out.println("rd = " + rd + ", rs1 = " + rs1 + ", imm = " + imm);}
 		reg[rd] = pc + 4; // Store return address
 		// TODO: Remove + in += below and fix infinite loop in loop.s
-		pc += (reg[rs1] + imm) & 0xFFFFFFFE; // Jump target address sets LSB to 0
+		pc = (reg[rs1] + imm) & 0xFFFFFFFE; // Jump target address sets LSB to 0
 		if (pc % 4 != 0) {
 			System.out.println("Instruction fetch exception; pc not multiple of 4 bytes");
 		}
@@ -302,11 +309,11 @@ public class IsaSim {
 				memValue &= 0x000000FF;
 				ram.storeByte(memAddr, memValue);
 				break;
-			case 0x1: // SH (TODO: test_sh does not work)
+			case 0x1: // SH
 				memValue &= 0x0000FFFF;
 				ram.storeHalfWord(memAddr, memValue);
 				break;
-			case 0x2: // SW (TODO: test_sw does not work)
+			case 0x2: // SW
 				ram.storeWord(memAddr, memValue);
 				break;
 		}
