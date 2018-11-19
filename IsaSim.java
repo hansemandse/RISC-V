@@ -1,4 +1,3 @@
-
 /*
  * RISC-V Instruction Set Simulator
  * 
@@ -8,12 +7,17 @@
  */
 
 import Memory;
-import java.io.*;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.DataInputStream;
+import java.io.PrintWriter;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.*;
 
 public class IsaSim {
 	// Insert path to binary file containing RISC-V instructions
-	public final static String FILEPATH = "tests/addi/test_bltu.bin";
+	public final static String FILEPATH = "tests/addi/test_divu.bin";
 
 	// Initial value of the program counter (default is zero)
 	public final static Integer INITIAL_PC = 0;
@@ -135,11 +139,14 @@ public class IsaSim {
 			reg[0] = 0; // Resetting the x0 register
 
 			// Ecall or Ebreak has been encountered
-			if (breakProgram) {
+			if (breakProgram || !ram.containsKey(pc)) {
 				if (DEBUGGING) {
-					System.out.println("Ecall encountered");
+					System.out.println("Ecall or end of program encountered");
 				}
-				printFile(FILEPATH);
+				printBinary(FILEPATH);
+				if (DEBUGGING) {
+					printFile(FILEPATH);
+				}
 				break;
 			}
 			cc++;
@@ -170,8 +177,8 @@ public class IsaSim {
 	public static void jumpAndLink(int instr) {
 		// General information
 		int rd = (instr >> 7) & 0x1F;
-		int imm = (((instr >> 21) & 0x3FF) << 1) + (((instr >> 20) & 0x1) << 11) + (((instr >> 12) & 0xFF) << 12)
-				+ ((instr >> 31) << 20);
+		int imm = (((instr >> 21) & 0x3FF) << 1) | (((instr >> 20) & 0x1) << 11) | 
+				  (((instr >> 12) & 0xFF) << 12) | ((instr >> 31) << 20);
 		if ((instr >> 31) == 1) {
 			imm |= 0xFFF00000; // Sign-extension if necessary
 		}
@@ -207,8 +214,8 @@ public class IsaSim {
 		// General information
 		int rs1 = (instr >> 15) & 0x1F;
 		int rs2 = (instr >> 20) & 0x1F;
-		int imm = (((instr >> 8) & 0xF) << 1) + (((instr >> 25) & 0x3F) << 5) + (((instr >> 7) & 0x1) << 11)
-				+ ((instr >> 31) << 12);
+		int imm = (((instr >> 8) & 0xF) << 1) | (((instr >> 25) & 0x3F) << 5) | 
+				  (((instr >> 7) & 0x1) << 11) | ((instr >> 31) << 12);
 		if ((imm >> 11) == 1) {
 			imm |= 0xFFFFE000; // Sign-extension if necessary
 		}
@@ -242,14 +249,14 @@ public class IsaSim {
 				return true;
 			}
 			break;
-		case 0x6: // BLTU (TODO: does not work with test_bltu)
-			if (((long) reg[rs1] & 0xFFFFFFFF) < ((long) reg[rs2] & 0xFFFFFFFF)) {
+		case 0x6: // BLTU
+			if (((long) reg[rs1] & 0xFFFFFFFFL) < ((long) reg[rs2] & 0xFFFFFFFFL)) {
 				pc += imm;
 				return true;
 			}
 			break;
-		case 0x7: // BGEU (TODO: does not work with test_bgeu)
-			if (((long) reg[rs1] & 0xFFFFFFFF) >= ((long) reg[rs2] & 0xFFFFFFFF)) {
+		case 0x7: // BGEU
+			if (((long) reg[rs1] & 0xFFFFFFFFL) >= ((long) reg[rs2] & 0xFFFFFFFFL)) {
 				pc += imm;
 				return true;
 			}
@@ -378,8 +385,8 @@ public class IsaSim {
 				reg[rd] = 0;
 			}
 			break;
-		case 0x3: // SLTIU (unsigned comparison) (TODO: does not work with test_sltiu)
-			if (((long) reg[rs1] & 0xFFFFFFFF) < ((long) imm & 0xFFFFFFFF)) {
+		case 0x3: // SLTIU (unsigned comparison)
+			if (((long) reg[rs1] & 0xFFFFFFFFL) < ((long) imm & 0xFFFFFFFFL)) {
 				reg[rd] = 1;
 			} else {
 				reg[rd] = 0;
@@ -425,28 +432,57 @@ public class IsaSim {
 		// Determining the type of instruction
 		int funct3 = (instr >> 12) & 0x7;
 		int funct7 = (instr >> 25);
+		System.out.println("funct3 = " + funct3 + ", funct7 = " + funct7);
 		switch (funct7) {
 		case 0x1: // MUL, DIV and so on
+			long regrs1 = reg[rs1], regrs2 = reg[rs2];
 			switch (funct3) {
 			case 0x0: // MUL
 				reg[rd] = reg[rs1] * reg[rs2];
 				break;
 			case 0x1: // MULH
-				reg[rd] = (reg[rs1] & 0xFFFF) * (reg[rs2] & 0xFFFF);
+				reg[rd] = (int) ((regrs1 * regrs2) >> 32) & 0xFFFFFFFF;
 				break;
 			case 0x2: // MULHSU
+				regrs2 &= 0xFFFFFFFFL;
+				reg[rd] = (int) ((regrs1 * regrs2) >> 32) & 0xFFFFFFFF;
 				break;
 			case 0x3: // MULHU
+				regrs1 &= 0xFFFFFFFFL;
+				regrs2 &= 0xFFFFFFFFL;
+				reg[rd] = (int) ((regrs1 * regrs2) >> 32) & 0xFFFFFFFF;
 				break;
 			case 0x4: // DIV
-				reg[rd] = reg[rs1] / reg[rs2];
+				if (reg[rs2] == 0) { // Division by zero
+					reg[rd] = -1;
+				} else {
+					reg[rd] = reg[rs1] / reg[rs2];
+				}
 				break;
 			case 0x5: // DIVU
+				if (reg[rs2] == 0) { // Division by zero
+					reg[rd] = -1;
+				} else {
+					regrs1 &= 0xFFFFFFFFL;
+					regrs2 &= 0xFFFFFFFFL;
+					reg[rd] = (int) (regrs1 / regrs2);
+				}
 				break;
 			case 0x6: // REM
-				reg[rd] = reg[rs1] % reg[rs2];
+				if (reg[rs2] == 0) { // Remainder by zero
+					reg[rd] = reg[rs1];
+				} else {
+					reg[rd] = reg[rs1] % reg[rs2];
+				}
 				break;
 			case 0x7: // REMU
+				if (reg[rs2] == 0) { // Remainder by zero
+					reg[rd] = reg[rs1];
+				} else {
+					regrs1 &= 0xFFFFFFFFL;
+					regrs2 &= 0xFFFFFFFFL;
+					reg[rd] = (int) (regrs1 % regrs2);
+				}
 				break;
 			}
 			break;
@@ -469,11 +505,11 @@ public class IsaSim {
 					reg[rd] = 0;
 				}
 				break;
-			case 0x3: // SLTU (unsigned comparison) (TODO: does not work with test_sltu)
+			case 0x3: // SLTU (unsigned comparison)
 				if (rs1 == 0 && reg[rs2] != 0) { // See manual page 15
 					reg[rd] = 1;
 				} else {
-					if (((long) reg[rs1] & 0xFFFFFFFF) < ((long) reg[rs2] & 0xFFFFFFFF)) {
+					if (((long) reg[rs1] & 0xFFFFFFFFL) < ((long) reg[rs2] & 0xFFFFFFFFL)) {
 						reg[rd] = 1;
 					} else {
 						reg[rd] = 0;
@@ -521,22 +557,48 @@ public class IsaSim {
 		}
 	}
 
+	public static void printBinary(String filePath) throws IOException {
+		FileOutputStream fileStream = null;
+		String filePathLocal = filePath.substring(0, filePath.lastIndexOf(".")) + "_reg.res";
+		try {
+			fileStream = new FileOutputStream(filePathLocal);
+			for (int i = 0; i < reg.length; i++) {
+				fileStream.write(intToByteArray(reg[i]));
+				System.out.println("x" + i + " : " + reg[i]);
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			if (fileStream != null) {
+				fileStream.close();
+			}
+		}
+		System.out.println("Binary register content is in file " + filePathLocal);
+	}
+
+	// From https://javadeveloperzone.com/java-basic/java-convert-int-to-byte-array/#2_int_to_byte_array 
+	public static byte[] intToByteArray(int value) {
+		ByteBuffer buffer = ByteBuffer.allocate(4);
+		buffer.putInt(Integer.reverseBytes(value));
+		return buffer.array();
+	}
+
 	public static void printFile(String filePath) throws IOException {
 		PrintWriter writer = null;
 		FileInputStream fileStream = null;
 		DataInputStream dataStream = null;
-		String filePathLocal = filePath.substring(0, filePath.indexOf(".")) + "_reg.txt";
+		String filePathLocal = filePath.substring(0, filePath.lastIndexOf(".")) + "_reg.txt";
 		if (DEBUGGING) {
-			System.out.println("Printing register content");
+			System.out.println("Printing register content to .txt");
 		}
 		try {
 			writer = new PrintWriter(filePathLocal, "UTF-8");
-			fileStream = new FileInputStream(filePath.substring(0, filePath.indexOf(".")) + ".res");
-			dataStream = new DataInputStream(fileStream);
 			writer.println("Post-execution register content");
 			for (int i = 0; i < reg.length; i++) {
 				writer.println("x" + i + " : " + reg[i]);
 			}
+			fileStream = new FileInputStream(filePath.substring(0, filePath.indexOf(".")) + ".res");
+			dataStream = new DataInputStream(fileStream);
 			writer.println("\nExpected post-execution register content");
 			for (int i = 0; i < reg.length; i++) {
 				writer.println("x" + i + " : " + Integer.reverseBytes(dataStream.readInt()));
@@ -555,7 +617,7 @@ public class IsaSim {
 			}
 		}
 		if (DEBUGGING) {
-			System.out.println("Finished printing register content");
+			System.out.println("Finished printing register content to .txt");
 		}
 		System.out.println("Register content is in file " + filePathLocal);
 	}
