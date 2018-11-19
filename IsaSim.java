@@ -1,7 +1,7 @@
 /*
  * RISC-V Instruction Set Simulator
  * 
- * A simple single-cycle simulator of the RV32I instruction set architecture.
+ * A simple single-cycle simulator of the RV32IM instruction set architecture.
  * 
  * @author Hans Jakob Damsgaard (hansjakobdamsgaard@gmail.com)
  */
@@ -17,7 +17,7 @@ import java.util.*;
 
 public class IsaSim {
 	// Insert path to binary file containing RISC-V instructions
-	public final static String FILEPATH = "tests/addi/test_divu.bin";
+	public final static String FILEPATH = "tests/task3/loop.bin";
 
 	// Initial value of the program counter (default is zero)
 	public final static Integer INITIAL_PC = 0;
@@ -34,12 +34,12 @@ public class IsaSim {
 
 	// A single memory for instructions and data allowing "byte addressing"
 	// using different integer key values (pc and sp counting in bytes)
-	static Memory ram = new Memory();
+	public static Memory ram = new Memory();
 
 	public static void main(String[] args) throws IOException {
 		System.out.println("Hello RISC-V World!");
-		reg[2] = INITIAL_SP; // Reset stack pointer
-		ram.readBinary(FILEPATH); // Read instructions into memory
+		ram.readBinary(FILEPATH, INITIAL_PC); // Read instructions into memory
+		reg[2] = INITIAL_SP;
 		boolean offsetPC = false, breakProgram = false; // For determining next pc value
 		int cc = 0; // Clock cycle counter
 
@@ -286,46 +286,25 @@ public class IsaSim {
 		int memValue = 0;
 		switch (funct3) {
 		case 0x0: // LB
-			if (ram.containsKey(memAddr)) {
-				memValue = ram.readByte(memAddr);
-				if ((memValue >> 7) == 1) {
-					memValue |= 0xFFFFFF00; // Sign-extension if necessary
-				}
-			} else {
-				throw new NullPointerException();
+			memValue = ram.readByte(memAddr);
+			if ((memValue >> 7) == 1) {
+				memValue |= 0xFFFFFF00; // Sign-extension if necessary
 			}
 			break;
 		case 0x1: // LH
-			if (ram.containsKey(memAddr)) {
-				memValue = ram.readHalfWord(memAddr);
-				if ((memValue >> 15) == 1) {
-					memValue |= 0xFFFF0000; // Sign-extension if necessary
-				}
-			} else {
-				throw new NullPointerException();
+			memValue = ram.readHalfWord(memAddr);
+			if ((memValue >> 15) == 1) {
+				memValue |= 0xFFFF0000; // Sign-extension if necessary
 			}
 			break;
 		case 0x2: // LW
-			if (ram.containsKey(memAddr)) {
-				memValue = ram.readWord(memAddr);
-			} else {
-				throw new NullPointerException();
-			}
+			memValue = ram.readWord(memAddr);
 			break;
 		case 0x4: // LBU
-			if (ram.containsKey(memAddr)) {
-				memValue = ram.readByte(memAddr);
-			} else {
-				throw new NullPointerException();
-			}
+			memValue = ram.readByte(memAddr);
 			break;
 		case 0x5: // LHU
-			if (ram.containsKey(memAddr)) {
-				memValue = ram.readHalfWord(memAddr);
-			} else {
-				throw new NullPointerException();
-			}
-			break;
+			memValue = ram.readHalfWord(memAddr);
 		}
 		reg[rd] = memValue;
 	}
