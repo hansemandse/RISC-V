@@ -26,7 +26,7 @@ public class IsaSim {
 	public final static Integer INITIAL_SP = Integer.MAX_VALUE;
 
 	// Activate/deactivate debugging prints (default is true)
-	public final static Boolean DEBUGGING = true;
+	public final static Boolean DEBUGGING = false;
 
 	// Static variables used throughout the simulator
 	static int pc = INITIAL_PC; // Program counter (counting in bytes)
@@ -39,7 +39,7 @@ public class IsaSim {
 	public static void main(String[] args) throws IOException {
 		System.out.println("Hello RISC-V World!");
 		ram.readBinary(FILEPATH, INITIAL_PC); // Read instructions into memory
-		reg[2] = INITIAL_SP;
+		reg[2] = INITIAL_SP; // Reset stack pointer
 		boolean offsetPC = false, breakProgram = false; // For determining next pc value
 		int cc = 0; // Clock cycle counter
 
@@ -308,12 +308,12 @@ public class IsaSim {
 		}
 		reg[rd] = memValue;
 	}
-
+	
 	public static void storeInstruction(int instr) {
 		// General information
 		int rs1 = (instr >> 15) & 0x1F;
 		int rs2 = (instr >> 20) & 0x1F;
-		int imm = ((instr >> 7) & 0x1F) + ((instr >> 25) << 5);
+		int imm = ((instr >> 7) & 0x1F) | ((instr >> 25) << 5);
 		if ((instr >> 31) == 1) {
 			imm |= 0xFFFFF000; // Sign-extension if necessary
 		}
@@ -411,7 +411,9 @@ public class IsaSim {
 		// Determining the type of instruction
 		int funct3 = (instr >> 12) & 0x7;
 		int funct7 = (instr >> 25);
-		System.out.println("funct3 = " + funct3 + ", funct7 = " + funct7);
+		if (DEBUGGING) {
+			System.out.println("funct3 = " + funct3 + ", funct7 = " + funct7);
+		}
 		switch (funct7) {
 		case 0x1: // MUL, DIV and so on
 			long regrs1 = reg[rs1], regrs2 = reg[rs2];

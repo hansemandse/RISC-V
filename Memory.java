@@ -15,9 +15,9 @@ interface MemoryInterface {
     // Checks if memory contains a value at given address
     public boolean containsKey(int addr);
     // Interface methods to read different data sizes
-    public int readWord(int addr);
-    public int readHalfWord(int addr);
-    public int readByte(int addr);
+    public int readWord(int addr) throws NullPointerException;
+    public int readHalfWord(int addr) throws NullPointerException;
+    public int readByte(int addr) throws NullPointerException;
     // Interface methods to store different data sizes
     public void storeWord(int addr, int value);
     public void storeHalfWord(int addr, int value);
@@ -40,7 +40,7 @@ public class Memory implements MemoryInterface {
         return memory.containsKey(addr);
     }
 
-    public int readWord(int addr) {
+    public int readWord(int addr) throws NullPointerException {
         if (memory.containsKey(addr) && memory.containsKey(addr+1) && 
             memory.containsKey(addr+2) && memory.containsKey(addr+3)) {
                 return ((memory.get(addr+3) << 24) & 0xFF000000) | ((memory.get(addr+2) << 16) & 0x00FF0000) |
@@ -51,7 +51,7 @@ public class Memory implements MemoryInterface {
         
     }
 
-    public int readHalfWord(int addr) {
+    public int readHalfWord(int addr) throws NullPointerException {
         if (memory.containsKey(addr) && memory.containsKey(addr+1)) {
             return ((memory.get(addr+1) << 8) & 0x0000FF00) | (memory.get(addr) & 0x000000FF);
         } else {
@@ -59,7 +59,7 @@ public class Memory implements MemoryInterface {
         }
     }
 
-    public int readByte(int addr) {
+    public int readByte(int addr) throws NullPointerException {
         if (memory.containsKey(addr)) {
             return memory.get(addr) & 0x000000FF;
         } else {
